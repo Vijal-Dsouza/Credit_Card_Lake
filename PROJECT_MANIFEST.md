@@ -9,7 +9,7 @@
 | **METHODOLOGY_VERSION** | PBVI v4.4 / BCE v1.7 |
 | **Classification** | Training Demo System — PBVI Data Engineering Training Vehicle |
 | **Brief Version** | v1.0 |
-| **Status** | Phase 5 complete — Phase 6 (Build) not yet started |
+| **Status** | Phase 6 in progress — Session 1 complete, Session 2 not yet started |
 
 **Brief description:** A structured Medallion data lake (Bronze → Silver → Gold) that ingests daily credit card transaction extract files, enforces defined quality rules at each layer boundary, and produces Gold-layer aggregations queryable via DuckDB. The pipeline serves financial data analysts and risk teams who currently access raw extract files directly — bypassing quality control and producing inconsistent results. The system does not compute risk, make credit decisions, or modify source system records.
 
@@ -35,12 +35,12 @@
 | source/accounts_20240101.csv | PRESENT | Pre-Phase 1 | Engineer | Seed data — accounts delta file for 2024-01-01. 2 records (ACC-001, ACC-002) |
 | source/transaction_codes.csv | PRESENT | Pre-Phase 1 | Engineer | Seed data — static transaction codes reference. 4 codes (PURCH01, PAY01, FEE01, INT01) |
 | source/transactions_20240101.csv | PRESENT | Pre-Phase 1 | Engineer | Seed data — transactions file for 2024-01-01. 5 records |
-| docs/prompts/S1_execution_prompt.md | PRESENT | Phase 5 | Engineer | Session 1 execution prompt — Project scaffold, Docker environment, pipeline.py skeleton. 5 tasks |
-| docs/prompts/S2_execution_prompt.md | PRESENT | Phase 5 | Engineer | Session 2 execution prompt — Bronze loader: transactions, accounts, transaction codes. 4 tasks |
-| docs/prompts/S3_execution_prompt.md | PRESENT | Phase 5 | Engineer | Session 3 execution prompt — Silver dbt models: transaction codes, accounts, transactions, quarantine. 5 tasks |
-| docs/prompts/S4_execution_prompt.md | PRESENT | Phase 5 | Engineer | Session 4 execution prompt — Gold dbt models: daily summary, weekly account summary. 3 tasks |
-| docs/prompts/S5_execution_prompt.md | PRESENT | Phase 5 | Engineer | Session 5 execution prompt — Pipeline orchestration: historical, incremental, idempotency, audit trail. 4 tasks |
-| docs/prompts/S6_execution_prompt.md | PRESENT | Phase 5 | Engineer | Session 6 execution prompt — End-to-end integration, Phase 8 sign-off preparation. 3 tasks |
+| sessions/S01_execution_prompt.md | PRESENT | Phase 5 | Engineer | Session 1 execution prompt — Project scaffold, Docker environment, pipeline.py skeleton. 5 tasks |
+| sessions/S02_execution_prompt.md | PRESENT | Phase 5 | Engineer | Session 2 execution prompt — Bronze loader: transactions, accounts, transaction codes. 4 tasks |
+| sessions/S03_execution_prompt.md | PRESENT | Phase 5 | Engineer | Session 3 execution prompt — Silver dbt models: transaction codes, accounts, transactions, quarantine. 5 tasks |
+| sessions/S04_execution_prompt.md | PRESENT | Phase 5 | Engineer | Session 4 execution prompt — Gold dbt models: daily summary, weekly account summary. 3 tasks |
+| sessions/S05_execution_prompt.md | PRESENT | Phase 5 | Engineer | Session 5 execution prompt — Pipeline orchestration: historical, incremental, idempotency, audit trail. 4 tasks |
+| sessions/S06_execution_prompt.md | PRESENT | Phase 5 | Engineer | Session 6 execution prompt — End-to-end integration, Phase 8 sign-off preparation. 3 tasks |
 
 ---
 
@@ -49,7 +49,6 @@
 | Directory | Status | Phase | Owner | Description |
 |---|---|---|---|---|
 | source/ | PRESENT | Pre-Phase 1 | Engineer | Static seed CSV files — read-only input to the pipeline. Never modified by build |
-| docs/prompts/ | PRESENT | Phase 5 | Engineer | CC session execution prompt files — one per session (S1–S6). Methodology artifacts under version control |
 
 ---
 
@@ -57,7 +56,8 @@
 
 | File | Status | Phase | Owner | Description |
 |---|---|---|---|---|
-| *(populated as sessions run)* | | | | |
+| sessions/S01_LOG.md | PRESENT | Phase 6 | Engineer | Session 1 log — 5 tasks completed. Pending engineer sign-off. |
+| sessions/S01_VERIFICATION_RECORD.md | PRESENT | Phase 6 | Engineer | Session 1 verification record — all test cases recorded. |
 
 ---
 

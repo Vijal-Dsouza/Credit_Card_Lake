@@ -125,7 +125,7 @@ def _call_loader(config, run_id, loader_fn, model_name, *loader_args):
         err = result.get("error", "loader returned FAILED")
         _append_failed_log(config.data_dir, run_id, config.mode, model_name, started_at, err)
         return None, err
-    _append_phase_log(config.data_dir, run_id, config.mode, model_name, started_at, result)
+    _append_phase_log(config.data_dir, run_id, config.mode, model_name, started_at, result, result.get("error_message"))
     return result, None
 
 
@@ -152,6 +152,8 @@ def _run_bronze_historical(config: PipelineConfig, run_id: str, totals: list) ->
 
 def _run_bronze_incremental(config: PipelineConfig, run_id: str, totals: list) -> str | None:
     watermark = read_watermark(config.data_dir)
+    if watermark is None:
+        return "Incremental mode requires a prior historical run — no watermark found in pipeline/control.parquet."
     next_date = watermark + timedelta(days=1)
     date_str = next_date.strftime("%Y-%m-%d")
 

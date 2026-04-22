@@ -14,9 +14,9 @@
 |---------|-----------|--------|--------|
 | 1.1 | Repository Scaffold | Completed | 31dfef5 |
 | 1.2 | Dockerfile and Docker Compose | Completed | 6afc2f3 |
-| 1.3 | Environment Configuration and Startup Validation Module | | |
-| 1.4 | Source File Pre-flight Check | | |
-| 1.5 | Run Log and Control Table Initialisation Helpers | | |
+| 1.3 | Environment Configuration and Startup Validation Module | Completed | 3a594a6 |
+| 1.4 | Source File Pre-flight Check | Completed | 9f6d652 |
+| 1.5 | Run Log and Control Table Initialisation Helpers | Completed | d22345c |
 
 Valid Status values: Completed | BLOCKED | SKIPPED
 
@@ -42,7 +42,7 @@ Valid Status values: Completed | BLOCKED | SKIPPED
 
 | Task | Deviation observed | Action taken |
 |------|--------------------|--------------|
-|      |                    |              |
+| 1.5 | Task prompt says "Use DuckDB for all Parquet reads and writes" — DuckDB 0.10.0 segfaults reading pyarrow 24.x written parquet on Windows (second read of a pandas-written file). | Switched lake_io.py to pyarrow directly for all parquet I/O. DuckDB used for analytical queries in subsequent sessions. No invariant impact. |
 
 ---
 

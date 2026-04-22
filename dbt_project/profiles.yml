@@ -1,0 +1,6 @@
+cc_lake:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('DATA_DIR', '/data') }}/pipeline/dbt_catalog.duckdb"

@@ -12,8 +12,8 @@
 
 | Task Id | Task Name | Status | Commit |
 |---------|-----------|--------|--------|
-| 1.1 | Repository Scaffold | | |
-| 1.2 | Dockerfile and Docker Compose | | |
+| 1.1 | Repository Scaffold | Completed | 31dfef5 |
+| 1.2 | Dockerfile and Docker Compose | BLOCKED | |
 | 1.3 | Environment Configuration and Startup Validation Module | | |
 | 1.4 | Source File Pre-flight Check | | |
 | 1.5 | Run Log and Control Table Initialisation Helpers | | |
@@ -26,7 +26,7 @@ Valid Status values: Completed | BLOCKED | SKIPPED
 
 | Resumed at | Resumed from Task | Blocking issue resolution | Resolved at | Root cause |
 |------------|-------------------|--------------------------|-------------|------------|
-|            |                   |                           |             |            |
+| 2026-04-22 | 1.2 | Docker Desktop started — daemon was not running | | ENVIRONMENTAL |
 
 ---
 
@@ -50,7 +50,7 @@ Valid Status values: Completed | BLOCKED | SKIPPED
 
 | Task | Observation | Nature | Recommended action |
 |------|-------------|--------|--------------------|
-|      |             |        |                    |
+| 1.1 | tools/challenge.sh not present — tools/ directory was not initialised. Challenge agent step skipped for all tasks this session. | MISSING | Initialise tools/ from DG-OS repo before next session. Register in PROJECT_MANIFEST.md. |
 
 ---
 

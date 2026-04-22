@@ -1,0 +1,10 @@
+version: "3.8"
+services:
+  pipeline:
+    build: .
+    env_file: .env
+    volumes:
+      - ./data:/data
+      - ./source:/source
+      - ./dbt_project:/app/dbt_project
+    working_dir: /app

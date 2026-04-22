@@ -83,6 +83,6 @@ SESSION INTEGRATION CHECK PASS
 
 ## Engineer Sign-Off
 
-**[ ] Engineer sign-off — Vijal**
+**[x] Engineer sign-off — Vijal**
 
 *Claude never declares this session complete. Engineer signs off before PR is raised.*

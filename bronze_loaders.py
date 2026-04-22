@@ -81,3 +81,47 @@ def load_bronze_transaction_codes(config: PipelineConfig, run_id: str) -> dict:
         return {"status": "WARNING", "records_processed": 0, "records_written": 0}
 
     return {"status": "SUCCESS", "records_processed": source_count, "records_written": verified_count}
+
+
+def load_bronze_accounts(config: PipelineConfig, date: date, run_id: str) -> dict:
+    date_str = date.strftime("%Y-%m-%d")
+    out_path = (
+        Path(config.data_dir) / "bronze" / "accounts" / f"date={date_str}" / "data.parquet"
+    )
+
+    if out_path.exists():
+        print(f"Bronze accounts {date} already loaded — skipping.")
+        return {"status": "SKIPPED", "records_processed": 0, "records_written": 0}
+
+    started_at = datetime.utcnow()
+    src_name = f"accounts_{date_str}.csv"
+    src = (Path(config.source_dir) / src_name).as_posix()
+    source_count = duckdb.execute(
+        f"SELECT COUNT(*) FROM read_csv_auto('{src}')"
+    ).fetchone()[0]
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    ingested_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f")
+    out = out_path.as_posix()
+
+    duckdb.execute(f"""
+        COPY (
+            SELECT *,
+                '{src_name}' AS _source_file,
+                CAST('{ingested_at}' AS TIMESTAMP) AS _ingested_at,
+                '{run_id}' AS _pipeline_run_id
+            FROM read_csv_auto('{src}')
+        ) TO '{out}' (FORMAT PARQUET)
+    """)
+
+    verified_count = _verify_partition_integrity(out, source_count)
+
+    if source_count == 0:
+        _warn_empty_source(
+            config, run_id, f"accounts_{date_str}", started_at,
+            f"accounts_{date_str}.csv contained 0 rows — Bronze partition written but empty. "
+            "Analyst review required.",
+        )
+        return {"status": "WARNING", "records_processed": 0, "records_written": 0}
+
+    return {"status": "SUCCESS", "records_processed": source_count, "records_written": verified_count}

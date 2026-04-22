@@ -1,0 +1,13 @@
+name: cc_transactions_lake
+version: "1.0.0"
+config-version: 2
+profile: cc_lake
+model-paths: ["models"]
+vars:
+  data_dir: "{{ env_var('DATA_DIR', '/data') }}"
+models:
+  cc_transactions_lake:
+    silver:
+      +materialized: table
+    gold:
+      +materialized: table

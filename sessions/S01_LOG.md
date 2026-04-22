@@ -13,7 +13,7 @@
 | Task Id | Task Name | Status | Commit |
 |---------|-----------|--------|--------|
 | 1.1 | Repository Scaffold | Completed | 31dfef5 |
-| 1.2 | Dockerfile and Docker Compose | BLOCKED | |
+| 1.2 | Dockerfile and Docker Compose | Completed | 6afc2f3 |
 | 1.3 | Environment Configuration and Startup Validation Module | | |
 | 1.4 | Source File Pre-flight Check | | |
 | 1.5 | Run Log and Control Table Initialisation Helpers | | |

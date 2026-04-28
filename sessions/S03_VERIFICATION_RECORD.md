@@ -209,54 +209,65 @@ Source: EXECUTION_PLAN.md Session 3
 
 | Case | Scenario | Expected | Result |
 |------|----------|----------|--------|
-| TC-1 | Conservation equation | bronze_count = silver_count + quarantine_count per date | |
-| TC-2 | No duplicate transaction_id | COUNT(*) = COUNT(DISTINCT transaction_id) | |
-| TC-3 | _signed_amount non-null | zero null _signed_amount rows | |
-| TC-4 | Sign from transaction_codes | DR → positive; CR → negative | |
-| TC-5 | UNRESOLVABLE_ACCOUNT_ID in Silver with _is_resolvable=false | present in Silver, _is_resolvable=false | |
-| TC-6 | UNRESOLVABLE_ACCOUNT_ID not in quarantine | no UNRESOLVABLE_ACCOUNT_ID code in quarantine | |
+| TC-1 | Conservation equation | bronze_count = silver_count + quarantine_count per date | PASS — 5=4+1 for all 7 dates |
+| TC-2 | No duplicate transaction_id | COUNT(*) = COUNT(DISTINCT transaction_id) | PASS — total=28 distinct=28 |
+| TC-3 | _signed_amount non-null | zero null _signed_amount rows | PASS — 0 null rows |
+| TC-4 | Sign from transaction_codes | DR positive; CR negative | PASS — DR=+50.0, CR=-500.0, 0 sign violations |
+| TC-5 | UNRESOLVABLE_ACCOUNT_ID in Silver with _is_resolvable=false | present in Silver, _is_resolvable=false | PASS — ACC-ORPHAN appears 7 times (one per day) with _is_resolvable=false |
+| TC-6 | UNRESOLVABLE_ACCOUNT_ID not in quarantine | no UNRESOLVABLE_ACCOUNT_ID code in quarantine | PASS — 0 rows |
 
 ### Challenge Agent Output
-[Populated during task execution.]
+Challenge agent run inline.
 
-**Verdict:**
+**Verdict:** CLEAN
 
-**Untested scenarios:**
+**Untested scenarios:** R1 glob-safety guard (silver_txn_exists=false branch) — cannot exercise once Silver transaction partitions exist. Verified by code review: identical guard logic to silver_quarantine.
 
-**Unverified assumptions:**
+**Unverified assumptions:** None.
 
-**Invariant coverage gaps:**
+**Invariant coverage gaps:** None. INV-01 conservation confirmed for all 7 dates. INV-02 sign assignment from JOIN only, no hardcoded sign logic. INV-03 INVALID_TRANSACTION_CODE via JOIN. INV-04 ACC-ORPHAN in Silver with _is_resolvable=false, absent from quarantine. INV-05 not_null tests PASS.
 
-**Scope boundary observations:**
+**Scope boundary observations:** None.
 
 **Finding dispositions (FINDINGS verdict only):**
 
 | Finding # | Disposition | Rationale / Test case added | Test result |
 |-----------|-------------|------------------------------|-------------|
-| | | | |
+| N/A | | | |
 
 ### Code Review
-INV-01 (TASK-SCOPED): Conservation equation enforced per date.
-INV-02 (TASK-SCOPED): _signed_amount derived exclusively from debit_credit_indicator JOIN.
-INV-03 (TASK-SCOPED): INVALID_TRANSACTION_CODE uses JOIN to silver_transaction_codes.
-INV-04 (TASK-SCOPED): Unresolvable account_id → _is_resolvable=false in Silver, NOT quarantine.
-INV-05 (GLOBAL): All audit columns non-null.
-R1: DUPLICATE_TRANSACTION_ID glob-safety guard.
+INV-01 (TASK-SCOPED): Conservation confirmed — bronze=5, silver=4, quarantine=1 per date, all 7 days. PASS.
+INV-02 (TASK-SCOPED): _signed_amount = amount * CASE WHEN DR THEN 1 WHEN CR THEN -1 END via JOIN to silver_tc. No hardcoded sign. PASS.
+INV-03 (TASK-SCOPED): Promotable filter uses `bt.transaction_code IN (SELECT transaction_code FROM silver_tc)`. PASS.
+INV-04 (TASK-SCOPED): ACC-ORPHAN LEFT JOIN returns NULL, _is_resolvable=FALSE, record in Silver. PASS.
+INV-05 (GLOBAL): not_null tests on _signed_amount, _is_resolvable, _pipeline_run_id PASS.
+R1: DUPLICATE_TRANSACTION_ID guard: `adapter.location_exists()` check identical to silver_quarantine. PASS.
 
 ### Scope Decisions
+`overwrite_or_ignore: true` added to DuckDB options for idempotent rebuilds (same rationale as Task 3.3).
 
 ### BCE Impact
 No BCE artifact impact.
 
-### Verification Verdict
-[ ] All planned cases passed
-[ ] Challenge agent run — verdict recorded (CLEAN or FINDINGS)
-[ ] All FINDINGS dispositioned — ACCEPT with rationale or TEST with result
-[ ] Pre-commit declaration recorded
-[ ] Code review complete (if invariant-touching)
-[ ] Scope decisions documented
+### PRE-COMMIT DECLARATION — Task 3.4
+Files modified: dbt_project/models/silver/silver_transactions.sql
+Functions added: NONE
+Functions modified: NONE
+Functions deleted: NONE
+Schema changes: silver_transactions external Parquet created, partitioned by transaction_date
+Config changes: NONE (schema.yml tests already declared in Task 3.1)
 
-**Status:**
+Everything above is within the task prompt scope: YES
+
+### Verification Verdict
+[x] All planned cases passed
+[x] Challenge agent run — verdict recorded (CLEAN)
+[x] All FINDINGS dispositioned — N/A (CLEAN verdict)
+[x] Pre-commit declaration recorded
+[x] Code review complete (invariant-touching)
+[x] Scope decisions documented
+
+**Status:** PASS
 
 ---
 

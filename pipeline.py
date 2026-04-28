@@ -2,6 +2,7 @@ import os
 import shutil
 import subprocess
 import sys
+import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -9,7 +10,7 @@ from pathlib import Path
 import duckdb
 
 from config import load_config, PipelineConfig
-from lake_io import append_run_log, read_watermark
+from lake_io import append_run_log, read_watermark, write_watermark
 from bronze_loaders import (
     load_bronze_transaction_codes,
     load_bronze_accounts,
@@ -343,14 +344,55 @@ def run_gold_phase(config: PipelineConfig, run_id: str) -> PhaseResult:
     return PhaseResult(success=True, records_processed=0, records_written=0, error=None)
 
 
+def _run_historical(config: PipelineConfig) -> None:
+    run_id = str(uuid.uuid4())
+    validate_source_files(config)
+    _append_log(
+        config.data_dir, run_id, config.mode, "pipeline_start", "BRONZE",
+        datetime.utcnow(), "SUCCESS",
+    )
+
+    result = run_bronze_phase(config, run_id)
+    if not result.success:
+        _append_log(config.data_dir, run_id, config.mode, "pipeline_failed", "BRONZE",
+                    datetime.utcnow(), "FAILED", result.error)
+        print(f"ERROR: Bronze phase failed: {result.error}")
+        sys.exit(1)
+
+    result = run_silver_phase(config, run_id)
+    if not result.success:
+        _append_log(config.data_dir, run_id, config.mode, "pipeline_failed", "SILVER",
+                    datetime.utcnow(), "FAILED", result.error)
+        print(f"ERROR: Silver phase failed: {result.error}")
+        sys.exit(1)
+
+    result = run_gold_phase(config, run_id)
+    if not result.success:
+        _append_log(config.data_dir, run_id, config.mode, "pipeline_failed", "GOLD",
+                    datetime.utcnow(), "FAILED", result.error)
+        print(f"ERROR: Gold phase failed: {result.error}")
+        sys.exit(1)
+
+    try:
+        write_watermark(config.data_dir, config.end_date, run_id)
+    except Exception as e:
+        _append_log(config.data_dir, run_id, config.mode, "pipeline_failed", "GOLD",
+                    datetime.utcnow(), "FAILED", f"Watermark write failed: {e}")
+        print(f"ERROR: Watermark write failed: {e}")
+        sys.exit(1)
+
+    wm = read_watermark(config.data_dir)
+    assert wm == config.end_date, f"Watermark verify FAIL: wrote {config.end_date}, read {wm}"
+    print(f"Pipeline complete. Watermark advanced to {config.end_date}.")
+    sys.exit(0)
+
+
 def main():
     config = load_config()
-    validate_source_files(config)
-    run_id = datetime.utcnow().strftime("run-%Y%m%d-%H%M%S")
-    print(f"Startup validation complete. Pipeline mode: {config.mode}. run_id: {run_id}")
-    result = run_bronze_phase(config, run_id)
-    print(f"Bronze phase: {result}")
-    if not result.success:
+    if config.mode == "historical":
+        _run_historical(config)
+    else:
+        print("ERROR: Incremental mode not yet implemented.")
         sys.exit(1)
 
 

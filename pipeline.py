@@ -344,6 +344,21 @@ def run_gold_phase(config: PipelineConfig, run_id: str) -> PhaseResult:
     return PhaseResult(success=True, records_processed=0, records_written=0, error=None)
 
 
+def _check_silver_accounts(config: PipelineConfig, run_id: str) -> None:
+    acc_path = Path(config.data_dir) / "silver" / "accounts" / "data.parquet"
+    error_msg = (
+        "silver_accounts absent or empty — incremental Silver phase requires a baseline "
+        "accounts snapshot from the historical run. Re-run historical pipeline first."
+    )
+    if not acc_path.exists() or duckdb.execute(f"SELECT COUNT(*) FROM '{acc_path}'").fetchone()[0] == 0:
+        _append_log(
+            config.data_dir, run_id, config.mode, "pipeline_failed", "SILVER",
+            datetime.utcnow(), "FAILED", error_msg,
+        )
+        print(f"ERROR: {error_msg}")
+        sys.exit(1)
+
+
 def _run_historical(config: PipelineConfig) -> None:
     run_id = str(uuid.uuid4())
     validate_source_files(config)
@@ -387,13 +402,59 @@ def _run_historical(config: PipelineConfig) -> None:
     sys.exit(0)
 
 
+def _run_incremental(config: PipelineConfig) -> None:
+    run_id = str(uuid.uuid4())
+
+    watermark = read_watermark(config.data_dir)
+    if watermark is None:
+        print("No watermark found. Run historical pipeline first.")
+        sys.exit(1)
+
+    next_date = watermark + timedelta(days=1)
+    validate_source_files(config)
+    _check_silver_accounts(config, run_id)
+
+    result = run_bronze_phase(config, run_id)
+    if not result.success:
+        _append_log(config.data_dir, run_id, config.mode, "pipeline_failed", "BRONZE",
+                    datetime.utcnow(), "FAILED", result.error)
+        print(f"ERROR: Bronze phase failed: {result.error}")
+        sys.exit(1)
+
+    result = run_silver_phase(config, run_id)
+    if not result.success:
+        _append_log(config.data_dir, run_id, config.mode, "pipeline_failed", "SILVER",
+                    datetime.utcnow(), "FAILED", result.error)
+        print(f"ERROR: Silver phase failed: {result.error}")
+        sys.exit(1)
+
+    result = run_gold_phase(config, run_id)
+    if not result.success:
+        _append_log(config.data_dir, run_id, config.mode, "pipeline_failed", "GOLD",
+                    datetime.utcnow(), "FAILED", result.error)
+        print(f"ERROR: Gold phase failed: {result.error}")
+        sys.exit(1)
+
+    try:
+        write_watermark(config.data_dir, next_date, run_id)
+    except Exception as e:
+        _append_log(config.data_dir, run_id, config.mode, "pipeline_failed", "GOLD",
+                    datetime.utcnow(), "FAILED", f"Watermark write failed: {e}")
+        print(f"ERROR: Watermark write failed: {e}")
+        sys.exit(1)
+
+    wm = read_watermark(config.data_dir)
+    assert wm == next_date, f"Watermark verify FAIL: wrote {next_date}, read {wm}"
+    print(f"Incremental pipeline complete. Watermark advanced to {next_date}.")
+    sys.exit(0)
+
+
 def main():
     config = load_config()
     if config.mode == "historical":
         _run_historical(config)
     else:
-        print("ERROR: Incremental mode not yet implemented.")
-        sys.exit(1)
+        _run_incremental(config)
 
 
 if __name__ == "__main__":

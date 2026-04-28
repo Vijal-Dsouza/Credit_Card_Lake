@@ -14,3 +14,19 @@ models:
       - name: transactions_by_type
         tests:
           - not_null
+
+  - name: gold_weekly_account_summary
+    description: Gold weekly account summary — one row per (week_start_date, account_id), resolvable transactions only
+    tests:
+      - unique:
+          column_name: "cast(week_start_date as varchar) || '|' || account_id"
+    columns:
+      - name: week_start_date
+        tests:
+          - not_null
+      - name: account_id
+        tests:
+          - not_null
+      - name: _pipeline_run_id
+        tests:
+          - not_null

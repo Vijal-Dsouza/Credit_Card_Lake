@@ -4,3 +4,6 @@ data/
 __pycache__/
 *.pyc
 .dbt/
+dbt_project/target/
+dbt_project/logs/
+dbt_project/.user.yml

@@ -13,8 +13,8 @@
 
 | Task Id | Task Name | Status | Commit |
 |---------|-----------|--------|--------|
-| 3.1 | Silver Transaction Codes Model | | |
-| 3.2 | Silver Accounts Model | | |
+| 3.1 | Silver Transaction Codes Model | Completed | cc87c85 |
+| 3.2 | Silver Accounts Model | Completed | pending |
 | 3.3 | Silver Quarantine Model | | |
 | 3.4 | Silver Transactions Model | | |
 | 3.5 | Silver Phase Function | | |

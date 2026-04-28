@@ -3,7 +3,7 @@
 
 **Path:** `sessions/S03_execution_prompt.md`
 **Claude.md version:** v1.0
-**Execution mode:** [ ] Manual | [ ] Autonomous
+**Execution mode:** [ ] Manual | [x] Autonomous
 
 ---
 

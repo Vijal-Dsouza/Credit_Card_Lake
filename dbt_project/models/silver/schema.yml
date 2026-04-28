@@ -1,0 +1,77 @@
+version: 2
+
+models:
+  - name: silver_transaction_codes
+    description: Silver reference table for transaction codes promoted from Bronze
+    columns:
+      - name: transaction_code
+        tests:
+          - not_null
+          - unique
+      - name: debit_credit_indicator
+        tests:
+          - not_null
+      - name: transaction_type
+        tests:
+          - not_null
+      - name: affects_balance
+        tests:
+          - not_null
+      - name: _source_file
+        tests:
+          - not_null
+      - name: _pipeline_run_id
+        tests:
+          - not_null
+
+  - name: silver_accounts
+    description: Silver accounts — latest record per account_id, valid records only
+    columns:
+      - name: account_id
+        tests:
+          - not_null
+          - unique
+      - name: _pipeline_run_id
+        tests:
+          - not_null
+      - name: _record_valid_from
+        tests:
+          - not_null
+
+  - name: silver_quarantine
+    description: Records rejected from Silver transactions and accounts
+    columns:
+      - name: _rejection_reason
+        tests:
+          - not_null
+          - accepted_values:
+              values:
+                - NULL_REQUIRED_FIELD
+                - INVALID_AMOUNT
+                - DUPLICATE_TRANSACTION_ID
+                - INVALID_TRANSACTION_CODE
+                - INVALID_CHANNEL
+                - INVALID_ACCOUNT_STATUS
+      - name: _source_file
+        tests:
+          - not_null
+      - name: _pipeline_run_id
+        tests:
+          - not_null
+
+  - name: silver_transactions
+    description: Silver transactions — promotable records with sign assignment and referential flag
+    columns:
+      - name: transaction_id
+        tests:
+          - not_null
+          - unique
+      - name: _signed_amount
+        tests:
+          - not_null
+      - name: _is_resolvable
+        tests:
+          - not_null
+      - name: _pipeline_run_id
+        tests:
+          - not_null

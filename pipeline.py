@@ -1,3 +1,6 @@
+import os
+import shutil
+import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -172,6 +175,55 @@ def _run_bronze_incremental(config: PipelineConfig, run_id: str, totals: list) -
     return None
 
 
+_DBT_PROJECT_DIR = Path(__file__).parent / "dbt_project"
+
+
+def _append_log(
+    data_dir: str,
+    run_id: str,
+    mode: str,
+    model_name: str,
+    layer: str,
+    started_at: datetime,
+    status: str,
+    error_message: str | None = None,
+) -> None:
+    append_run_log(data_dir, {
+        "run_id": run_id,
+        "pipeline_type": mode,
+        "model_name": model_name,
+        "layer": layer,
+        "started_at": started_at,
+        "completed_at": datetime.utcnow(),
+        "status": status,
+        "records_processed": 0,
+        "records_written": 0,
+        "records_rejected": None,
+        "error_message": error_message,
+    })
+
+
+def _rename_quarantine_partitions(data_dir: str) -> None:
+    for f in Path(data_dir, "silver", "quarantine").rglob("rejected0.parquet"):
+        f.replace(f.parent / "rejected.parquet")
+
+
+def _run_dbt_build(model_name: str, config: PipelineConfig) -> subprocess.CompletedProcess:
+    scripts_dir = Path(sys.executable).parent
+    dbt_cmd = next(
+        (str(c) for c in (scripts_dir / "dbt.exe", scripts_dir / "dbt.cmd", scripts_dir / "dbt") if c.exists()),
+        shutil.which("dbt") or "dbt",
+    )
+    env = {**os.environ, "DATA_DIR": config.data_dir, "SOURCE_DIR": config.source_dir}
+    return subprocess.run(
+        [dbt_cmd, "build", "--select", model_name],
+        cwd=str(_DBT_PROJECT_DIR),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+
 def run_bronze_phase(config: PipelineConfig, run_id: str) -> PhaseResult:
     Path(config.data_dir, "pipeline").mkdir(parents=True, exist_ok=True)
     totals = [0, 0]
@@ -190,6 +242,70 @@ def run_bronze_phase(config: PipelineConfig, run_id: str) -> PhaseResult:
     if err:
         return PhaseResult(success=False, records_processed=totals[0], records_written=totals[1], error=err)
     return PhaseResult(success=True, records_processed=totals[0], records_written=totals[1], error=None)
+
+
+def run_silver_phase(config: PipelineConfig, run_id: str) -> PhaseResult:
+    run_log_path = Path(config.data_dir) / "pipeline" / "run_log.parquet"
+    if run_log_path.exists():
+        bronze_warnings = duckdb.execute(
+            f"SELECT COUNT(*) FROM read_parquet('{run_log_path}') "
+            "WHERE run_id = ? AND layer = 'BRONZE' AND status = 'WARNING'",
+            [run_id],
+        ).fetchone()[0]
+        if bronze_warnings > 0:
+            _append_log(
+                config.data_dir, run_id, config.mode, "silver_phase_start", "SILVER",
+                datetime.utcnow(), "WARNING",
+                "One or more Bronze partitions have zero rows — Silver will process empty "
+                "input for those dates. Analyst review recommended.",
+            )
+
+    tc_path = Path(config.data_dir) / "silver" / "transaction_codes" / "data.parquet"
+    tc_started = datetime.utcnow()
+
+    if not tc_path.exists():
+        _append_log(
+            config.data_dir, run_id, config.mode, "silver_transaction_codes", "SILVER",
+            tc_started, "FAILED",
+            "silver_transaction_codes absent or empty — cannot promote transactions",
+        )
+        return PhaseResult(success=False, records_processed=0, records_written=0,
+                           error="silver_transaction_codes absent or empty — cannot promote transactions")
+
+    row_count = duckdb.execute(f"SELECT COUNT(*) FROM read_parquet('{tc_path}')").fetchone()[0]
+    if row_count == 0:
+        _append_log(
+            config.data_dir, run_id, config.mode, "silver_transaction_codes", "SILVER",
+            tc_started, "FAILED",
+            "silver_transaction_codes absent or empty — cannot promote transactions",
+        )
+        return PhaseResult(success=False, records_processed=0, records_written=0,
+                           error="silver_transaction_codes absent or empty — cannot promote transactions")
+
+    _append_log(
+        config.data_dir, run_id, config.mode, "silver_transaction_codes", "SILVER",
+        tc_started, "SKIPPED",
+    )
+
+    for model_name in ("silver_accounts", "silver_quarantine", "silver_transactions"):
+        started_at = datetime.utcnow()
+        proc = _run_dbt_build(model_name, config)
+        if proc.returncode != 0:
+            _append_log(
+                config.data_dir, run_id, config.mode, model_name, "SILVER",
+                started_at, "FAILED",
+                proc.stderr or proc.stdout,
+            )
+            return PhaseResult(success=False, records_processed=0, records_written=0,
+                               error=proc.stderr or proc.stdout)
+        if model_name == "silver_quarantine":
+            _rename_quarantine_partitions(config.data_dir)
+        _append_log(
+            config.data_dir, run_id, config.mode, model_name, "SILVER",
+            started_at, "SUCCESS",
+        )
+
+    return PhaseResult(success=True, records_processed=0, records_written=0, error=None)
 
 
 def main():

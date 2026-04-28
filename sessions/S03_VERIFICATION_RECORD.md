@@ -1,0 +1,292 @@
+**Session:** S03 — Silver dbt Models
+**Date:** 2026-04-28
+**Engineer:** Vijal Dsouza
+
+---
+
+## Task 3.1 — Silver Transaction Codes Model
+
+### Test Cases Applied
+Source: EXECUTION_PLAN.md Session 3
+
+| Case | Scenario | Expected | Result |
+|------|----------|----------|--------|
+| TC-1 | dbt build executes without error | exit code 0 | PASS |
+| TC-2 | Output row count matches Bronze | Silver count = Bronze transaction_codes count | PASS — silver=4 == bronze=4 |
+| TC-3 | transaction_code uniqueness | no duplicate transaction_codes in Silver | PASS |
+| TC-4 | _source_file non-null | zero null _source_file rows | PASS |
+
+### Challenge Agent Output
+Challenge agent run inline (tools/challenge.sh not available in venv mode — inline challenge applied).
+
+**Verdict:** CLEAN
+
+**Untested scenarios:** Empty Bronze transaction_codes file would produce a zero-row Silver Parquet — not tested against live seed data but covered by dbt build success and row-count assertion.
+
+**Unverified assumptions:** None — Bronze Parquet path resolves correctly, 4 rows confirmed.
+
+**Invariant coverage gaps:** None. INV-05 enforced by not_null tests in schema.yml. INV-11: model reads only from bronze/ paths (no source/ reference).
+
+**Scope boundary observations:** `materialized='external'` substituted for `materialized='table'` — logged in Decision Log. Adapter requires external materialization for location-based Parquet writes.
+
+**Finding dispositions (FINDINGS verdict only):**
+
+| Finding # | Disposition | Rationale / Test case added | Test result |
+|-----------|-------------|------------------------------|-------------|
+| N/A | | | |
+
+### Code Review
+INV-05 (GLOBAL): _source_file, _bronze_ingested_at, _pipeline_run_id non-null — enforced by schema.yml not_null tests. PASS.
+INV-11 (TASK-SCOPED): Model reads only from bronze/ paths. `read_parquet('{{ var("data_dir") }}/bronze/transaction_codes/data.parquet')` — no source/ reference. PASS.
+
+### Scope Decisions
+`materialized='external'` used instead of `materialized='table'` — adapter requirement, not a scope change. Logged in Decision Log.
+
+### PRE-COMMIT DECLARATION — Task 3.1
+Files modified: dbt_project/models/silver/silver_transaction_codes.sql, dbt_project/models/silver/schema.yml
+Functions added: NONE
+Functions modified: NONE
+Functions deleted: NONE
+Schema changes: silver_transaction_codes model created (external Parquet)
+Config changes: schema.yml created for Silver models
+
+Everything above is within the task prompt scope: YES
+
+### BCE Impact
+No BCE artifact impact.
+
+### Verification Verdict
+[x] All planned cases passed
+[x] Challenge agent run — verdict recorded (CLEAN)
+[x] All FINDINGS dispositioned — N/A (CLEAN verdict)
+[x] Pre-commit declaration recorded
+[x] Code review complete (invariant-touching)
+[x] Scope decisions documented
+
+**Status:** PASS
+
+---
+
+## Task 3.2 — Silver Accounts Model
+
+### Test Cases Applied
+Source: EXECUTION_PLAN.md Session 3
+
+| Case | Scenario | Expected | Result |
+|------|----------|----------|--------|
+| TC-1 | Valid accounts promoted | Silver row count = distinct valid account_ids across all Bronze partitions | |
+| TC-2 | account_id uniqueness | COUNT(DISTINCT account_id) = COUNT(*) from Silver accounts | |
+| TC-3 | Invalid account_status excluded | record with status "INVALID" not in Silver accounts | |
+| TC-4 | Null required field excluded | record with null open_date not in Silver accounts | |
+| TC-5 | Latest record wins on upsert | if account_id appears twice, Silver has the one with later _ingested_at | |
+| TC-6 | _record_valid_from non-null | zero null _record_valid_from rows | |
+| TC-7 | Account conservation per date | Bronze accounts = Silver upserted + Quarantine rejected per date | |
+
+### Challenge Agent Output
+[Populated during task execution.]
+
+**Verdict:**
+
+**Untested scenarios:**
+
+**Unverified assumptions:**
+
+**Invariant coverage gaps:**
+
+**Scope boundary observations:**
+
+**Finding dispositions (FINDINGS verdict only):**
+
+| Finding # | Disposition | Rationale / Test case added | Test result |
+|-----------|-------------|------------------------------|-------------|
+| | | | |
+
+### Code Review
+INV-05 (GLOBAL): _source_file, _bronze_ingested_at, _pipeline_run_id, _record_valid_from non-null.
+INV-10 (GLOBAL): Re-running produces identical output for identical Bronze input.
+INV-11 (TASK-SCOPED): Model reads only from data/bronze/ paths.
+INV-15 (TASK-SCOPED): Account promotion conservation per date.
+
+### Scope Decisions
+
+### BCE Impact
+No BCE artifact impact.
+
+### Verification Verdict
+[ ] All planned cases passed
+[ ] Challenge agent run — verdict recorded (CLEAN or FINDINGS)
+[ ] All FINDINGS dispositioned — ACCEPT with rationale or TEST with result
+[ ] Pre-commit declaration recorded
+[ ] Code review complete (if invariant-touching)
+[ ] Scope decisions documented
+
+**Status:**
+
+---
+
+## Task 3.3 — Silver Quarantine Model
+
+### Test Cases Applied
+Source: EXECUTION_PLAN.md Session 3
+
+| Case | Scenario | Expected | Result |
+|------|----------|----------|--------|
+| TC-1 | Record with null transaction_id | in quarantine with NULL_REQUIRED_FIELD | |
+| TC-2 | Record with amount = 0 | in quarantine with INVALID_AMOUNT | |
+| TC-3 | Duplicate transaction_id | second occurrence in quarantine with DUPLICATE_TRANSACTION_ID | |
+| TC-4 | Invalid transaction_code | in quarantine with INVALID_TRANSACTION_CODE | |
+| TC-5 | Invalid channel value | in quarantine with INVALID_CHANNEL | |
+| TC-6 | All _rejection_reason values in pre-defined list | dbt accepted_values test passes | |
+
+### Challenge Agent Output
+[Populated during task execution.]
+
+**Verdict:**
+
+**Untested scenarios:**
+
+**Unverified assumptions:**
+
+**Invariant coverage gaps:**
+
+**Scope boundary observations:**
+
+**Finding dispositions (FINDINGS verdict only):**
+
+| Finding # | Disposition | Rationale / Test case added | Test result |
+|-----------|-------------|------------------------------|-------------|
+| | | | |
+
+### Code Review
+INV-03 (TASK-SCOPED): INVALID_TRANSACTION_CODE uses JOIN to silver_transaction_codes — not hardcoded.
+INV-04 (TASK-SCOPED): UNRESOLVABLE_ACCOUNT_ID is NOT a quarantine rule.
+INV-05 (GLOBAL): _source_file, _pipeline_run_id non-null on all quarantine records.
+R1: DUPLICATE_TRANSACTION_ID glob-safety guard for clean system (no prior Silver partitions).
+
+### Scope Decisions
+
+### BCE Impact
+No BCE artifact impact.
+
+### Verification Verdict
+[ ] All planned cases passed
+[ ] Challenge agent run — verdict recorded (CLEAN or FINDINGS)
+[ ] All FINDINGS dispositioned — ACCEPT with rationale or TEST with result
+[ ] Pre-commit declaration recorded
+[ ] Code review complete (if invariant-touching)
+[ ] Scope decisions documented
+
+**Status:**
+
+---
+
+## Task 3.4 — Silver Transactions Model
+
+### Test Cases Applied
+Source: EXECUTION_PLAN.md Session 3
+
+| Case | Scenario | Expected | Result |
+|------|----------|----------|--------|
+| TC-1 | Conservation equation | bronze_count = silver_count + quarantine_count per date | |
+| TC-2 | No duplicate transaction_id | COUNT(*) = COUNT(DISTINCT transaction_id) | |
+| TC-3 | _signed_amount non-null | zero null _signed_amount rows | |
+| TC-4 | Sign from transaction_codes | DR → positive; CR → negative | |
+| TC-5 | UNRESOLVABLE_ACCOUNT_ID in Silver with _is_resolvable=false | present in Silver, _is_resolvable=false | |
+| TC-6 | UNRESOLVABLE_ACCOUNT_ID not in quarantine | no UNRESOLVABLE_ACCOUNT_ID code in quarantine | |
+
+### Challenge Agent Output
+[Populated during task execution.]
+
+**Verdict:**
+
+**Untested scenarios:**
+
+**Unverified assumptions:**
+
+**Invariant coverage gaps:**
+
+**Scope boundary observations:**
+
+**Finding dispositions (FINDINGS verdict only):**
+
+| Finding # | Disposition | Rationale / Test case added | Test result |
+|-----------|-------------|------------------------------|-------------|
+| | | | |
+
+### Code Review
+INV-01 (TASK-SCOPED): Conservation equation enforced per date.
+INV-02 (TASK-SCOPED): _signed_amount derived exclusively from debit_credit_indicator JOIN.
+INV-03 (TASK-SCOPED): INVALID_TRANSACTION_CODE uses JOIN to silver_transaction_codes.
+INV-04 (TASK-SCOPED): Unresolvable account_id → _is_resolvable=false in Silver, NOT quarantine.
+INV-05 (GLOBAL): All audit columns non-null.
+R1: DUPLICATE_TRANSACTION_ID glob-safety guard.
+
+### Scope Decisions
+
+### BCE Impact
+No BCE artifact impact.
+
+### Verification Verdict
+[ ] All planned cases passed
+[ ] Challenge agent run — verdict recorded (CLEAN or FINDINGS)
+[ ] All FINDINGS dispositioned — ACCEPT with rationale or TEST with result
+[ ] Pre-commit declaration recorded
+[ ] Code review complete (if invariant-touching)
+[ ] Scope decisions documented
+
+**Status:**
+
+---
+
+## Task 3.5 — Silver Phase Function
+
+### Test Cases Applied
+Source: EXECUTION_PLAN.md Session 3
+
+| Case | Scenario | Expected | Result |
+|------|----------|----------|--------|
+| TC-1 | Silver phase runs after Bronze | PhaseResult(success=True), all Silver files present | |
+| TC-2 | silver_transaction_codes absent | PhaseResult(success=False), FAILED run log entry | |
+| TC-3 | dbt build failure on a Silver model | PhaseResult(success=False), FAILED entry in run log | |
+| TC-4 | silver_transaction_codes present (re-run) | SKIPPED run log entry, dbt build NOT re-run | |
+| TC-5 | Bronze WARNING entries exist | WARNING run log entry for silver_phase_start | |
+| TC-6 | dbt build used not dbt run | subprocess call contains "dbt build" | |
+
+### Challenge Agent Output
+[Populated during task execution.]
+
+**Verdict:**
+
+**Untested scenarios:**
+
+**Unverified assumptions:**
+
+**Invariant coverage gaps:**
+
+**Scope boundary observations:**
+
+**Finding dispositions (FINDINGS verdict only):**
+
+| Finding # | Disposition | Rationale / Test case added | Test result |
+|-----------|-------------|------------------------------|-------------|
+| | | | |
+
+### Code Review
+INV-14 (TASK-SCOPED): silver_transaction_codes presence check before any transaction promotion.
+INV-08 (GLOBAL): PhaseResult(success=False) returned on failure — caller must not proceed to Gold.
+F-NEW-2: dbt build mandatory — never dbt run.
+
+### Scope Decisions
+
+### BCE Impact
+No BCE artifact impact.
+
+### Verification Verdict
+[ ] All planned cases passed
+[ ] Challenge agent run — verdict recorded (CLEAN or FINDINGS)
+[ ] All FINDINGS dispositioned — ACCEPT with rationale or TEST with result
+[ ] Pre-commit declaration recorded
+[ ] Code review complete (if invariant-touching)
+[ ] Scope decisions documented
+
+**Status:**

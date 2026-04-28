@@ -334,3 +334,40 @@ Everything above is within the task prompt scope: YES
 [x] Scope decisions documented
 
 **Status:** PASS
+
+---
+
+## Session CC Challenge — Cross-Session Challenge (All Tasks)
+
+### Scope
+All 5 tasks: silver_transaction_codes, silver_accounts, silver_quarantine, silver_transactions, run_silver_phase.
+
+### Challenge Findings
+
+| Finding # | Task | Description | Severity |
+|-----------|------|-------------|----------|
+| F-CC-1 | 3.3, 3.4 | INV-10 violation: Silver models non-idempotent on re-run. DUPLICATE_TRANSACTION_ID check used Silver transactions glob — on re-run, all previously-promoted transactions were flagged as duplicates, breaking conservation equation. | CRITICAL — INV-10 NEVER NEGOTIABLE |
+| F-CC-2 | 3.5 | `shutil.which("dbt")` found system-wide dbt Cloud CLI instead of venv dbt.exe, causing dbt build failure. `_run_dbt_build` needed to prefer venv-local executable. | HIGH — execution correctness |
+| F-CC-3 | 3.3, 3.5 | `Path.rename()` fails on Windows if target exists. `rejected0.parquet` rename step failed on re-run. | HIGH — Windows compatibility |
+
+### Dispositions
+
+| Finding # | Disposition | Fix applied | Test result |
+|-----------|-------------|-------------|-------------|
+| F-CC-1 | FIXED | Replaced Silver-glob DUPLICATE check with intra-Bronze `ROW_NUMBER() OVER (PARTITION BY transaction_id ORDER BY _ingested_at) > 1`. Both silver_quarantine.sql and silver_transactions.sql updated. Removed `adapter.location_exists()` guard (no longer needed). | Conservation 5=4+1 all 7 dates; idempotency re-run PASS |
+| F-CC-2 | FIXED | `_run_dbt_build` checks `scripts_dir / "dbt.exe"`, `"dbt.cmd"`, `"dbt"` before falling back to `shutil.which`. | TC-1 PASS after fix |
+| F-CC-3 | FIXED | `_rename_quarantine_partitions` uses `f.replace(target)` instead of `f.rename(target)`. | Rename succeeds on re-run |
+
+### Session Integration Check Results
+
+| Check | Expected | Result |
+|-------|----------|--------|
+| Conservation: bronze = silver + quarantine per date (all 7 days) | 5 = 4 + 1 | PASS |
+| Silver transactions uniqueness | total = distinct transaction_id | PASS — 28 = 28 |
+| Silver accounts uniqueness | total = distinct account_id | PASS — 3 = 3 |
+| Silver quarantine rejection codes | Only accepted values | PASS — INVALID_CHANNEL only |
+| All Silver Parquet files present | tc, accounts, quarantine/date=*, transactions/transaction_date=* | PASS |
+| Idempotency: re-run conservation | Same as first run | PASS |
+
+### Session CC Challenge Verdict
+**FINDINGS** — 3 findings, all FIXED and verified passing.

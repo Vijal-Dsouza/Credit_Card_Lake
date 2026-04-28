@@ -8,22 +8,9 @@
     }
 ) }}
 
-{% set silver_txn_glob = var("data_dir") ~ "/silver/transactions/*/*.parquet" %}
-{% set silver_txn_exists = adapter.location_exists(silver_txn_glob) %}
-
 WITH silver_tc AS (
     SELECT transaction_code
     FROM read_parquet('{{ var("data_dir") }}/silver/transaction_codes/data.parquet')
-),
-
-silver_existing_txn AS (
-    {% if silver_txn_exists %}
-    SELECT transaction_id
-    FROM read_parquet('{{ silver_txn_glob }}')
-    {% else %}
-    SELECT NULL::VARCHAR AS transaction_id
-    WHERE 1 = 0
-    {% endif %}
 ),
 
 bronze_txn AS (
@@ -38,6 +25,10 @@ bronze_txn AS (
         transaction_code,
         merchant_name,
         channel,
+        ROW_NUMBER() OVER (
+            PARTITION BY transaction_id
+            ORDER BY _ingested_at
+        ) AS _bronze_rn,
         CASE
             WHEN transaction_id IS NULL OR TRIM(transaction_id) = ''
               OR account_id IS NULL OR TRIM(account_id) = ''
@@ -48,14 +39,21 @@ bronze_txn AS (
             THEN 'NULL_REQUIRED_FIELD'
             WHEN amount <= 0
             THEN 'INVALID_AMOUNT'
-            WHEN transaction_id IN (SELECT transaction_id FROM silver_existing_txn)
-            THEN 'DUPLICATE_TRANSACTION_ID'
             WHEN transaction_code NOT IN (SELECT transaction_code FROM silver_tc)
             THEN 'INVALID_TRANSACTION_CODE'
             WHEN channel NOT IN ('ONLINE', 'IN_STORE')
             THEN 'INVALID_CHANNEL'
-        END AS _rejection_reason
+        END AS _rejection_reason_base
     FROM read_parquet('{{ var("data_dir") }}/bronze/transactions/*/*.parquet')
+),
+
+bronze_txn_classified AS (
+    SELECT *,
+        CASE
+            WHEN _rejection_reason_base IS NOT NULL THEN _rejection_reason_base
+            WHEN _bronze_rn > 1 THEN 'DUPLICATE_TRANSACTION_ID'
+        END AS _rejection_reason
+    FROM bronze_txn
 ),
 
 rejected_txn AS (
@@ -79,7 +77,7 @@ rejected_txn AS (
         NULL::DATE             AS billing_cycle_start,
         NULL::DATE             AS billing_cycle_end,
         NULL::VARCHAR          AS customer_name
-    FROM bronze_txn
+    FROM bronze_txn_classified
     WHERE _rejection_reason IS NOT NULL
 ),
 

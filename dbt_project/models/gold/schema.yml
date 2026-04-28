@@ -1,0 +1,16 @@
+version: 2
+
+models:
+  - name: gold_daily_summary
+    description: Gold daily transaction summary — one row per calendar day, resolvable transactions only
+    columns:
+      - name: transaction_date
+        tests:
+          - not_null
+          - unique
+      - name: _pipeline_run_id
+        tests:
+          - not_null
+      - name: transactions_by_type
+        tests:
+          - not_null

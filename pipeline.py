@@ -308,6 +308,41 @@ def run_silver_phase(config: PipelineConfig, run_id: str) -> PhaseResult:
     return PhaseResult(success=True, records_processed=0, records_written=0, error=None)
 
 
+def run_gold_phase(config: PipelineConfig, run_id: str) -> PhaseResult:
+    run_log_path = Path(config.data_dir) / "pipeline" / "run_log.parquet"
+    if run_log_path.exists():
+        upstream_warnings = duckdb.execute(
+            f"SELECT COUNT(*) FROM read_parquet('{run_log_path}') "
+            "WHERE run_id = ? AND layer IN ('BRONZE', 'SILVER') AND status = 'WARNING'",
+            [run_id],
+        ).fetchone()[0]
+        if upstream_warnings > 0:
+            _append_log(
+                config.data_dir, run_id, config.mode, "gold_phase_start", "GOLD",
+                datetime.utcnow(), "WARNING",
+                "Upstream WARNING entries detected — Gold aggregations may reflect empty "
+                "Bronze partitions. Check run_log for Bronze/Silver WARNING entries.",
+            )
+
+    for model_name in ("gold_daily_summary", "gold_weekly_account_summary"):
+        started_at = datetime.utcnow()
+        proc = _run_dbt_build(model_name, config)
+        if proc.returncode != 0:
+            _append_log(
+                config.data_dir, run_id, config.mode, model_name, "GOLD",
+                started_at, "FAILED",
+                proc.stderr or proc.stdout,
+            )
+            return PhaseResult(success=False, records_processed=0, records_written=0,
+                               error=proc.stderr or proc.stdout)
+        _append_log(
+            config.data_dir, run_id, config.mode, model_name, "GOLD",
+            started_at, "SUCCESS",
+        )
+
+    return PhaseResult(success=True, records_processed=0, records_written=0, error=None)
+
+
 def main():
     config = load_config()
     validate_source_files(config)

@@ -265,28 +265,32 @@ def run_silver_phase(config: PipelineConfig, run_id: str) -> PhaseResult:
     tc_started = datetime.utcnow()
 
     if not tc_path.exists():
+        proc = _run_dbt_build("silver_transaction_codes", config)
+        if proc.returncode != 0:
+            _append_log(
+                config.data_dir, run_id, config.mode, "silver_transaction_codes", "SILVER",
+                tc_started, "FAILED", proc.stderr or proc.stdout,
+            )
+            return PhaseResult(success=False, records_processed=0, records_written=0,
+                               error=proc.stderr or proc.stdout)
         _append_log(
             config.data_dir, run_id, config.mode, "silver_transaction_codes", "SILVER",
-            tc_started, "FAILED",
-            "silver_transaction_codes absent or empty — cannot promote transactions",
+            tc_started, "SUCCESS",
         )
-        return PhaseResult(success=False, records_processed=0, records_written=0,
-                           error="silver_transaction_codes absent or empty — cannot promote transactions")
-
-    row_count = duckdb.execute(f"SELECT COUNT(*) FROM read_parquet('{tc_path}')").fetchone()[0]
-    if row_count == 0:
+    else:
+        row_count = duckdb.execute(f"SELECT COUNT(*) FROM read_parquet('{tc_path}')").fetchone()[0]
+        if row_count == 0:
+            _append_log(
+                config.data_dir, run_id, config.mode, "silver_transaction_codes", "SILVER",
+                tc_started, "FAILED",
+                "silver_transaction_codes absent or empty — cannot promote transactions",
+            )
+            return PhaseResult(success=False, records_processed=0, records_written=0,
+                               error="silver_transaction_codes absent or empty — cannot promote transactions")
         _append_log(
             config.data_dir, run_id, config.mode, "silver_transaction_codes", "SILVER",
-            tc_started, "FAILED",
-            "silver_transaction_codes absent or empty — cannot promote transactions",
+            tc_started, "SKIPPED",
         )
-        return PhaseResult(success=False, records_processed=0, records_written=0,
-                           error="silver_transaction_codes absent or empty — cannot promote transactions")
-
-    _append_log(
-        config.data_dir, run_id, config.mode, "silver_transaction_codes", "SILVER",
-        tc_started, "SKIPPED",
-    )
 
     for model_name in ("silver_accounts", "silver_quarantine", "silver_transactions"):
         started_at = datetime.utcnow()

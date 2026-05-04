@@ -1,8 +1,9 @@
-# EXECUTION_PLAN.md — Credit Card Transactions Lake — v1.6
+# EXECUTION_PLAN.md — Credit Card Transactions Lake — v1.7
 
 ## Changelog
 | Version | Date | Author | Change |
 |---|---|---|---|
+| v1.7 | 2026-05-04 | Vijal | S6 check (INV-15 Account Promotion Conservation) revised from per-date to aggregate form: `bronze_distinct_accounts == silver_distinct + quarantined_accounts`. Per-date methodology using `_source_file` was incompatible with `silver_accounts` latest-wins architecture — the model retains only the most recent record per account_id, so all accounts carry `_source_file` of the most recent ingestion date, making per-date attribution yield 0 for all but the final date. Aggregate form correctly verifies INV-15 (no account record silently dropped) without assuming per-date source file retention. Signed off by Vijal 2026-05-04. |
 | v1.0 | 2026-04-16 | Vijal | Greenfield — Initial |
 | v1.6 | 2026-04-21 | Vijal | Gap resolution pass — G8 and G9 applied: Task 3.4 added to INV-14 cross-reference row with note that enforcement is via reference JOIN in the model (halt mechanism remains in Task 3.5) (G8); Task 5.4 designated HARNESS-CANDIDATE — standalone DuckDB CLI harness form added covering all four audit assertions (TC-1 through TC-4) as stateless SQL runnable against any deployed lake instance without build context; regression classification updated from REGRESSION-RELEVANT to HARNESS-CANDIDATE (G9) |
 | v1.5 | 2026-04-21 | Vijal | Gap resolution pass — G1 through G7 applied: INV-15 (Account Promotion Conservation) added to Task 3.2 CC prompt, test cases, verification command, and Invariant Cross-Reference table (G1); INV-16 (Gold Struct Shape Integrity) added to Task 4.1 CC prompt — REFUND removed from struct definition, fixed four-key set enforced with zero-fill, dbt struct integrity test added, Task 4.1 invariant enforcement updated (G2); Task 6.1 Phase 8 verification suite extended with checks S6 (INV-15 accounts conservation) and G4 (INV-16 struct shape), invariant enforcement note updated to INV-01 through INV-16, Task 6.2 verification command updated (G3); Task 3.1 verification command updated from dbt run+test to dbt build; Task 3.1 TC-1 label updated (G4); Task 3.2 CC prompt and schema.yml updated with _record_valid_from audit column per INV-05 update and ARCHITECTURE v1.2 (G5); Task 3.3 quarantine location config explicitly set to write rejected.parquet, consistent with all verification command references (G6); Regression Classification Summary table corrected — Tasks 5.3 and 5.4 added as REGRESSION-RELEVANT (G7) |
@@ -2183,13 +2184,12 @@ A4: SELECT COUNT(DISTINCT _pipeline_run_id) FROM read_parquet('/data/silver/tran
     PASS if result is 0
 
 S6 (INV-15 — Account Promotion Conservation):
-    For each date d in 2024-01-01 through 2024-01-07:
-      bronze_acc_d  = SELECT COUNT(*) FROM '/data/bronze/accounts/date={d}/data.parquet'
-      silver_acc_d  = SELECT COUNT(DISTINCT account_id) FROM '/data/silver/accounts/data.parquet'
-                      WHERE _source_file = 'accounts_{d}.csv'
-      quarant_acc_d = SELECT COUNT(*) FROM read_parquet('/data/silver/quarantine/*/*.parquet')
-                      WHERE _source_file = 'accounts_{d}.csv' (0 if absent)
-    PASS if bronze_acc_d == silver_acc_d + quarant_acc_d for every date
+    bronze_distinct = SELECT COUNT(DISTINCT account_id)
+                      FROM read_parquet('/data/bronze/accounts/*/*.parquet')
+    silver_distinct = SELECT COUNT(*) FROM '/data/silver/accounts/data.parquet'
+    quarant_accts   = SELECT COUNT(*) FROM read_parquet('/data/silver/quarantine/*/*.parquet')
+                      WHERE _source_file LIKE 'accounts_%' (0 if absent)
+    PASS if bronze_distinct == silver_distinct + quarant_accts
 
 G4 (INV-16 — Gold Struct Shape Integrity):
     SELECT DISTINCT transactions_by_type FROM '/data/gold/daily_summary/data.parquet'
@@ -2224,7 +2224,7 @@ VERIFICATION_CHECKLIST.md (Task 6.2). Do not rename or omit any check.
 | A2 | Silver audit completeness | 0 null _pipeline_run_id across all Silver entities |
 | A3 | Gold audit completeness | 0 null _pipeline_run_id across both Gold files |
 | A4 | Run log traceability | 0 Silver _pipeline_run_ids missing from run_log SUCCESS entries |
-| S6 | Account conservation (INV-15) | bronze_acc_d = silver_upserted_d + quarantine_acc_d for all 7 dates |
+| S6 | Account conservation (INV-15) aggregate | bronze_distinct_accounts = silver_distinct + quarantined_accounts |
 | G4 | Gold struct shape (INV-16) | every row has exactly PURCHASE, PAYMENT, FEE, INTEREST; REFUND absent |
 
 **Verification command:**
@@ -2278,15 +2278,13 @@ print('A1 PASS')
 untraceable = duckdb.execute(\"SELECT COUNT(DISTINCT _pipeline_run_id) FROM read_parquet('/data/silver/transactions/*/*.parquet') WHERE _pipeline_run_id NOT IN (SELECT run_id FROM '/data/pipeline/run_log.parquet' WHERE status='SUCCESS')\").fetchone()[0]
 assert untraceable == 0, f'A4 FAIL: {untraceable}'; print('A4 PASS')
 
-# S6 — INV-15 Account Promotion Conservation
-for i in range(1, 8):
-    d = f'2024-01-0{i}'
-    bronze_acc = duckdb.execute(f\"SELECT COUNT(*) FROM '/data/bronze/accounts/date={d}/data.parquet'\").fetchone()[0]
-    silver_acc = duckdb.execute(f\"SELECT COUNT(DISTINCT account_id) FROM '/data/silver/accounts/data.parquet' WHERE _source_file = 'accounts_{d}.csv'\").fetchone()[0]
-    try: quarant_acc = duckdb.execute(f\"SELECT COUNT(*) FROM read_parquet('/data/silver/quarantine/*/*.parquet') WHERE _source_file = 'accounts_{d}.csv'\").fetchone()[0]
-    except: quarant_acc = 0
-    assert bronze_acc == silver_acc + quarant_acc, f'S6 FAIL {d}: bronze={bronze_acc} silver={silver_acc} quar={quarant_acc}'
-print('S6 PASS — INV-15 account conservation holds for all dates')
+# S6 — INV-15 Account Promotion Conservation (aggregate form — v1.7)
+bronze_distinct_acc = duckdb.execute(\"SELECT COUNT(DISTINCT account_id) FROM read_parquet('/data/bronze/accounts/*/*.parquet')\").fetchone()[0]
+silver_distinct_acc = duckdb.execute(\"SELECT COUNT(*) FROM '/data/silver/accounts/data.parquet'\").fetchone()[0]
+try: quarant_accts = duckdb.execute(\"SELECT COUNT(*) FROM read_parquet('/data/silver/quarantine/*/*.parquet') WHERE _source_file LIKE 'accounts_%'\").fetchone()[0]
+except: quarant_accts = 0
+assert bronze_distinct_acc == silver_distinct_acc + quarant_accts, f'S6 FAIL: bronze_distinct={bronze_distinct_acc} != silver({silver_distinct_acc}) + quar({quarant_accts})'
+print(f'S6 PASS — INV-15 aggregate account conservation holds (bronze_distinct={bronze_distinct_acc}, silver={silver_distinct_acc}, quar={quarant_accts})')
 
 # G4 — INV-16 Gold Struct Shape Integrity
 rows_g4 = duckdb.execute(\"SELECT transactions_by_type FROM '/data/gold/daily_summary/data.parquet'\").fetchall()
@@ -2442,7 +2440,7 @@ docker compose run --rm pipeline bash verification/REGRESSION_SUITE.sh
 | INV-12 Gold Unique Key Enforcement | 4.1, 4.2 | — |
 | INV-13 Source File Immutability | 1.4, 2.1, 2.2, 2.3 | — |
 | INV-14 Transaction Codes Precedence | 3.5, 3.4 | G8 (Task 3.4 added — enforces via JOIN to silver_transaction_codes in the INVALID_TRANSACTION_CODE rejection rule; the phase-level halt if the file is absent or empty remains the primary guard and lives in Task 3.5) |
-| INV-15 Account Promotion Conservation | 3.2, 3.3, 6.1 | G1 (added to Task 3.2 CC prompt, test cases, verification command; S6 check added to Task 6.1) |
+| INV-15 Account Promotion Conservation | 3.2, 3.3, 6.1 | G1 (added to Task 3.2 CC prompt, test cases, verification command; S6 check added to Task 6.1); v1.7 (S6 revised to aggregate form — per-date _source_file methodology incompatible with latest-wins model) |
 | INV-16 Gold Struct Shape Integrity | 4.1, 6.1 | G2 (REFUND removed from struct definition; fixed four-key STRUCT_PACK pattern added; TC-5/TC-6 and G4 check added) |
 
 ---
@@ -2491,3 +2489,5 @@ v1.4 signed off: Vijal at 21/04/2026
 v1.5 signed off: Vijal at 22/04/2026
 
 v1.6 signed off: Vijal at 22/04/2026
+
+v1.7 signed off: Vijal at 04/05/2026
